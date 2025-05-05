@@ -1,156 +1,225 @@
-from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 
-import os
-from dotenv import load_dotenv
-load_dotenv()
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = "TON_TOKEN_ICI"  # Remplace par ton token
 
-# Messages dans différentes langues
-LANG_MESSAGES = {
-    'Français': "Bienvenue !\nVeuillez lire attentivement cette description.",
-    'English': "Welcome!\nPlease read this description carefully.",
-    'العربية': "مرحبًا بك!\nيرجى قراءة هذا الوصف بعناية.",
-    'Deutsch': "Willkommen!\nBitte lesen Sie diese Beschreibung sorgfältig.",
-    'Español': "¡Bienvenido!\nPor favor, lea atentamente esta descripción."
+logging.basicConfig(level=logging.INFO)
+app = ApplicationBuilder().token(TOKEN).build()
+
+languages = {
+    "fr": "Français",
+    "en": "English",
+    "es": "Español",
+    "de": "Deutsch",
+    "ar": "العربية"
 }
 
-# Stocker les utilisateurs ayant choisi une langue
-user_language_selected = set()
+welcome_texts = {
+    "fr": "Bienvenue !",
+    "en": "Welcome!",
+    "es": "¡Bienvenido!",
+    "de": "Willkommen!",
+    "ar": "مرحبا بك!"
+}
 
-# Contenu des options du menu (titre, description, adresse, superficie, prix/m², lien)
-MENU_OPTIONS = {
-    'Option 1': {
-        'title': 'Titre 1',
-        'description': 'Ceci est la description détaillée de l\'option 1.',
-        'address': 'Adresse de l\'option 1 : 123 Rue Exemple, Paris, France',
-        'superficie': 'Superficie : 120 m²',
-        'prix_per_m2': 'Prix/m² : 1500€',
-        'link': 'https://exemple.com/option1'
+who_are_you_texts = {
+    "fr": "Vous êtes qui ? Veuillez entrer votre nom ou celui de votre société :",
+    "en": "Who are you? Please enter your name or company name:",
+    "es": "¿Quién eres? Introduzca su nombre o el de su empresa:",
+    "de": "Wer sind Sie? Bitte geben Sie Ihren Namen oder Firmennamen ein:",
+    "ar": "من أنت؟ يرجى إدخال اسمك أو اسم شركتك:"
+}
+
+thank_you_texts = {
+    "fr": "Merci pour votre visite !",
+    "en": "Thank you for visiting!",
+    "es": "¡Gracias por su visita!",
+    "de": "Danke für Ihren Besuch!",
+    "ar": "شكراً لزيارتك!"
+}
+
+descriptions = {
+    "fr": "Veuillez lire attentivement cette description : nous mettons ces produits en vente. Bonne continuation.",
+    "en": "Please read this description carefully: we are offering these products for sale. Best of luck.",
+    "es": "Lea atentamente esta descripción: ponemos estos productos a la venta. Buena suerte.",
+    "de": "Bitte lesen Sie diese Beschreibung sorgfältig: Wir bieten diese Produkte zum Verkauf an. Viel Erfolg.",
+    "ar": "يرجى قراءة هذا الوصف بعناية: نحن نعرض هذه المنتجات للبيع. بالتوفيق."
+}
+
+# Dictionnaire pour les produits avec leurs détails
+products = {
+    "villa": {
+        "title": "Villa",
+        "description": "Une belle villa spacieuse.",
+        "surface": "300 m²",
+        "address": "123 Rue de la Mer",
+        "location": "Ville A",
+        "photo_link": "https://link_to_photo_villa.com",
+        "video_link": "https://link_to_video_villa.com",
+        "price": "500,000€"
     },
-    'Option 2': {
-        'title': 'Titre 2',
-        'description': 'Description de l\'option 2.',
-        'address': 'Adresse de l\'option 2 : 456 Avenue Exemple, Lyon, France',
-        'superficie': 'Superficie : 100 m²',
-        'prix_per_m2': 'Prix/m² : 1200€',
-        'link': 'https://exemple.com/option2'
+    "garage": {
+        "title": "Garage",
+        "description": "Un garage spacieux pour 2 voitures.",
+        "surface": "50 m²",
+        "address": "456 Rue du Garage",
+        "location": "Ville B",
+        "photo_link": "https://link_to_photo_garage.com",
+        "video_link": "https://link_to_video_garage.com",
+        "price": "30,000€"
     },
-    'Option 3': {
-        'title': 'Titre 3',
-        'description': 'Description de l\'option 3.',
-        'address': 'Adresse de l\'option 3 : 789 Boulevard Exemple, Marseille, France',
-        'superficie': 'Superficie : 80 m²',
-        'prix_per_m2': 'Prix/m² : 1300€',
-        'link': 'https://exemple.com/option3'
+    "terrain1": {
+        "title": "Terrain 1",
+        "description": "Terrain à bâtir dans un quartier calme.",
+        "surface": "1000 m²",
+        "address": "789 Rue du Terrain",
+        "location": "Ville C",
+        "photo_link": "https://link_to_photo_terrain1.com",
+        "video_link": "https://link_to_video_terrain1.com",
+        "price": "150,000€"
     },
-    'Option 4': {
-        'title': 'Titre 4',
-        'description': 'Description de l\'option 4.',
-        'address': 'Adresse de l\'option 4 : 1010 Route Exemple, Bordeaux, France',
-        'superficie': 'Superficie : 150 m²',
-        'prix_per_m2': 'Prix/m² : 1400€',
-        'link': 'https://exemple.com/option4'
+    "terrain2": {
+        "title": "Terrain 2",
+        "description": "Grand terrain avec vue sur la montagne.",
+        "surface": "1500 m²",
+        "address": "101 Rue Montagne",
+        "location": "Ville D",
+        "photo_link": "https://link_to_photo_terrain2.com",
+        "video_link": "https://link_to_video_terrain2.com",
+        "price": "200,000€"
     },
-    'Option 5': {
-        'title': 'Titre 5',
-        'description': 'Description de l\'option 5.',
-        'address': 'Adresse de l\'option 5 : 2020 Rue Exemple, Lille, France',
-        'superficie': 'Superficie : 95 m²',
-        'prix_per_m2': 'Prix/m² : 1100€',
-        'link': 'https://exemple.com/option5'
-    },
-    'Option 6': {
-        'title': 'Titre 6',
-        'description': 'Description de l\'option 6.',
-        'address': 'Adresse de l\'option 6 : 3030 Avenue Exemple, Nantes, France',
-        'superficie': 'Superficie : 105 m²',
-        'prix_per_m2': 'Prix/m² : 1250€',
-        'link': 'https://exemple.com/option6'
-    },
-    'Option 7': {
-        'title': 'Titre 7',
-        'description': 'Description de l\'option 7.',
-        'address': 'Adresse de l\'option 7 : 4040 Boulevard Exemple, Nice, France',
-        'superficie': 'Superficie : 130 m²',
-        'prix_per_m2': 'Prix/m² : 1600€',
-        'link': 'https://exemple.com/option7'
+    "terrain3": {
+        "title": "Terrain 3",
+        "description": "Terrain idéal pour un projet commercial.",
+        "surface": "2000 m²",
+        "address": "202 Rue Commerciale",
+        "location": "Ville E",
+        "photo_link": "https://link_to_photo_terrain3.com",
+        "video_link": "https://link_to_video_terrain3.com",
+        "price": "250,000€"
     }
 }
 
-# Gérer les messages reçus
-def handle_message(update: Update, context: CallbackContext):
-    chat_id = update.message.chat_id
-    user_text = update.message.text
+# Fonction pour envoyer le message de bienvenue et proposer un choix de langue
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [
+        [InlineKeyboardButton(languages["fr"], callback_data="lang_fr"),
+         InlineKeyboardButton(languages["en"], callback_data="lang_en"),
+         InlineKeyboardButton(languages["es"], callback_data="lang_es"),
+         InlineKeyboardButton(languages["de"], callback_data="lang_de"),
+         InlineKeyboardButton(languages["ar"], callback_data="lang_ar")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Bienvenue! Choisissez une langue / Choose a language", reply_markup=reply_markup)
 
-    if user_text in LANG_MESSAGES:
-        # Envoyer message de bienvenue
-        context.bot.send_message(chat_id=chat_id, text=LANG_MESSAGES[user_text])
+# Fonction pour gérer le choix de la langue
+async def language_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    language = query.data.split("_")[1]
+    
+    # Envoyer le message de bienvenue
+    await query.answer()
+    await query.edit_message_text(welcome_texts[language])
 
-        # Ajouter utilisateur comme ayant choisi une langue
-        user_language_selected.add(chat_id)
+    # Demander le nom ou le nom de la société
+    await query.message.reply_text(who_are_you_texts[language])
 
-        # Afficher bouton "Continuer"
-        reply_keyboard = [['Continuer']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        context.bot.send_message(chat_id=chat_id, text="Appuyez sur Continuer pour accéder au menu :", reply_markup=markup)
+    # Enregistrer la langue choisie dans le contexte de l'utilisateur
+    context.user_data["language"] = language
 
-    elif user_text == 'Continuer' and chat_id in user_language_selected:
-        # Afficher le menu à 7 choix
-        menu_keyboard = [
-            ['Option 1', 'Option 2', 'Option 3'],
-            ['Option 4', 'Option 5'],
-            ['Option 6', 'Option 7']
-        ]
-        markup = ReplyKeyboardMarkup(menu_keyboard, resize_keyboard=True)
-        context.bot.send_message(chat_id=chat_id, text="Voici le menu :", reply_markup=markup)
+    # Ajouter un bouton "continuer"
+    keyboard = [[InlineKeyboardButton("Continuer", callback_data="continue")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text("Veuillez entrer votre nom ou le nom de votre société.", reply_markup=reply_markup)
 
-    elif user_text in MENU_OPTIONS:
-        # Afficher le titre, description, adresse, superficie, prix/m² et lien de l'option choisie
-        option = MENU_OPTIONS[user_text]
-        message = f"""
-**{option['title']}**
+# Fonction pour continuer après avoir entré le nom ou la société
+async def continue_after_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    language = context.user_data.get("language", "fr")
 
-{option['description']}
+    # Demander à l'utilisateur de visiter
+    await query.answer()
+    await query.edit_message_text(thank_you_texts[language])
 
-**Adresse** : {option['address']}
-**Superficie** : {option['superficie']}
-**Prix/m²** : {option['prix_per_m2']}
+    # Ajouter un bouton "continuer"
+    keyboard = [[InlineKeyboardButton("Continuer", callback_data="view_products")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text("Merci pour votre visite !", reply_markup=reply_markup)
 
-👉 {option['link']}
-"""
-        # Ajouter bouton "Retour"
-        reply_keyboard = [['Retour au menu']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        context.bot.send_message(chat_id=chat_id, text=message, reply_markup=markup)
+# Fonction pour afficher les produits
+async def view_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    language = context.user_data.get("language", "fr")
 
-    elif user_text == 'Retour au menu':
-        # Retourner au menu principal
-        menu_keyboard = [
-            ['Option 1', 'Option 2', 'Option 3'],
-            ['Option 4', 'Option 5'],
-            ['Option 6', 'Option 7']
-        ]
-        markup = ReplyKeyboardMarkup(menu_keyboard, resize_keyboard=True)
-        context.bot.send_message(chat_id=chat_id, text="Voici le menu :", reply_markup=markup)
+    # Menu des produits
+    keyboard = [
+        [InlineKeyboardButton("Villa", callback_data="product_villa"),
+         InlineKeyboardButton("Garage", callback_data="product_garage")],
+        [InlineKeyboardButton("Terrain 1", callback_data="product_terrain1"),
+         InlineKeyboardButton("Terrain 2", callback_data="product_terrain2")],
+        [InlineKeyboardButton("Terrain 3", callback_data="product_terrain3")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.answer()
+    await query.edit_message_text("Choisissez un produit / Choose a product", reply_markup=reply_markup)
 
-    else:
-        # Afficher le choix de langues par défaut
-        reply_keyboard = [['العربية', 'Français'], ['English', 'Deutsch'], ['Español']]
-        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-        context.bot.send_message(chat_id=chat_id, text="Veuillez choisir votre langue :", reply_markup=markup)
+# Fonction pour afficher les détails du produit
+async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    product_key = query.data.split("_")[1]
+    product = products.get(product_key)
 
-# Démarrage du bot
-def main():
-    updater = Updater(token=TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    if product:
+        # Afficher les détails du produit
+        product_details = f"""
+        Titre: {product['title']}
+        Description: {product['description']}
+        Superficie: {product['surface']}
+        Adresse: {product['address']}
+        Localisation: {product['location']}
+        Photos: {product['photo_link']}
+        Vidéo: {product['video_link']}
+        Prix: {product['price']}
+        """
 
-    handler = MessageHandler(Filters.text & ~Filters.command, handle_message)
-    dispatcher.add_handler(handler)
+        await query.answer()
+        await query.edit_message_text(product_details)
 
-    updater.start_polling()
-    updater.idle()
+        # Ajouter le bouton "Retour"
+        keyboard = [[InlineKeyboardButton("Retour", callback_data="view_products")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text("Retour au menu des produits", reply_markup=reply_markup)
 
-if __name__ == '__main__':
-    main()
+# Fonction pour proposer un prix
+async def propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    language = context.user_data.get("language", "fr")
+
+    # Proposer un prix
+    await query.answer()
+    await query.edit_message_text("Voulez-vous proposer un prix ?")
+
+    # Ajouter un bouton pour soumettre un prix
+    keyboard = [[InlineKeyboardButton("Proposer un prix", callback_data="submit_price")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.reply_text("Cliquez pour proposer un prix", reply_markup=reply_markup)
+
+# Ajouter les gestionnaires de commandes
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(language_choice, pattern="^lang_"))
+app.add_handler(CallbackQueryHandler(continue_after_name, pattern="^continue$"))
+app.add_handler(CallbackQueryHandler(view_products, pattern="^view_products$"))
+app.add_handler(CallbackQueryHandler(show_product_details, pattern="^product_"))
+app.add_handler(CallbackQueryHandler(propose_price, pattern="^submit_price$"))
+
+if __name__ == "__main__":
+    app.run_polling()
