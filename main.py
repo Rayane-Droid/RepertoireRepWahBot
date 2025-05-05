@@ -1,5 +1,9 @@
+
 import logging
 import os
+
+from keep_alive import keep_alive
+
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -253,4 +257,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     print("Bot is running...")
+    keep_alive()
     app.run_polling()
