@@ -4,31 +4,35 @@ languages = {
     "en": "English",
     "es": "Español",
     "de": "Deutsch",
+    "it": "Italiano",
     "ar": "العربية"
 }
 
 welcome_texts = {
-    "fr": "Bienvenue !",
-    "en": "Welcome!",
-    "es": "¡Bienvenido!",
-    "de": "Willkommen!",
-    "ar": "مرحبا بك!"
+    "fr": "Bienvenue! Comment puis-je vous aider?",
+    "en": "Welcome! How can I assist you?",
+    "es": "¡Bienvenido! ¿Cómo puedo ayudarte?",
+    "de": "Willkommen! Wie kann ich Ihnen helfen?",
+    "it": "Benvenuto! Come posso aiutarti?",
+    "ar": "مرحبًا! كيف يمكنني مساعدتك؟"
 }
 
 who_are_you_texts = {
-    "fr": "Veuillez entrer votre nom ou celui de votre société :",
-    "en": "Please enter your name or company name:",
-    "es": "Introduzca su nombre o el de su empresa:",
-    "de": "Bitte geben Sie Ihren Namen oder Firmennamen ein:",
-    "ar": "يرجى إدخال اسمك أو اسم شركتك:"
+    "fr": "Notre famille a le plaisir de faire votre connaissance, à qui ai-je l'honneur ?",
+    "en": "Our family is pleased to meet you, to whom do I have the honor?",
+    "es": "Nuestra familia tiene el placer de conocerte, ¿a quién tengo el honor de dirigirme?",
+    "de": "Unsere Familie freut sich, Sie kennenzulernen, wem habe ich die Ehre?",
+    "it": "La nostra famiglia è lieta di fare la tua conoscenza, a chi ho l'onore di parlare?",
+    "ar": "تتشرف عائلتنا بلقائكم، لمن أتشرف بالحديث؟"
 }
 
 thank_you_texts = {
-    "fr": "Merci pour votre visite !",
-    "en": "Thank you for visiting!",
-    "es": "¡Gracias por su visita!",
-    "de": "Danke für Ihren Besuch!",
-    "ar": "شكراً لزيارتك!"
+    "fr": "Merci pour votre message!",
+    "en": "Thank you for your message!",
+    "es": "¡Gracias por tu mensaje!",
+    "de": "Danke für Ihre Nachricht!",
+    "it": "Grazie per il tuo messaggio!",
+    "ar": "شكرًا على رسالتك!"
 }
 
 property_fields = {
