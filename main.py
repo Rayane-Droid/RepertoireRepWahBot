@@ -2,7 +2,7 @@
 import logging
 import os
 
-from Dictionnaire import languages, welcome_texts, who_are_you_texts, thank_you_texts
+from Dictionnaire import languages, welcome_texts, who_are_you_texts, thank_you_texts, property_fields
 
 from flask import Flask
 from threading import Thread
