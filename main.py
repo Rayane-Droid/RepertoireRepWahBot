@@ -150,7 +150,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     elif "user_name" not in context.user_data:
         await receive_name(update, context)
     else:
-        await update.message.reply_text("Veuillez utiliser les boutons pour continuer.")
+        await update.message.reply_text("Revenir Au Menu Principale. /start")
 
 
 # 4. Afficher la liste des produits
@@ -194,7 +194,7 @@ async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYP
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.message.reply_text("Que souhaitez-vous faire ?", reply_markup=reply_markup)
-        
+
 # 6. Proposition du client
 async def propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
