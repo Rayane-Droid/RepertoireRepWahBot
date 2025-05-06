@@ -44,39 +44,6 @@ if not TOKEN:
 logging.basicConfig(level=logging.INFO)
 app = ApplicationBuilder().token(TOKEN).build()
 
-
-languages = {
-    "fr": "Français",
-    "en": "English",
-    "es": "Español",
-    "de": "Deutsch",
-    "ar": "العربية"
-}
-
-welcome_texts = {
-    "fr": "Bienvenue !",
-    "en": "Welcome!",
-    "es": "¡Bienvenido!",
-    "de": "Willkommen!",
-    "ar": "مرحبا بك!"
-}
-
-who_are_you_texts = {
-    "fr": "Veuillez entrer votre nom ou celui de votre société :",
-    "en": "Please enter your name or company name:",
-    "es": "Introduzca su nombre o el de su empresa:",
-    "de": "Bitte geben Sie Ihren Namen oder Firmennamen ein:",
-    "ar": "يرجى إدخال اسمك أو اسم شركتك:"
-}
-
-thank_you_texts = {
-    "fr": "Merci pour votre visite !",
-    "en": "Thank you for visiting!",
-    "es": "¡Gracias por su visita!",
-    "de": "Danke für Ihren Besuch!",
-    "ar": "شكراً لزيارتك!"
-}
-
 products = {
     "villa": {
         "title": "Villa",
