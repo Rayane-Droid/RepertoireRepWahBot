@@ -1,0 +1,121 @@
+import csv
+from datetime import datetime
+
+# Fonction pour enregistrer les données dans le fichier CSV
+def save_to_csv(data):
+    # Définir le chemin du fichier CSV
+    file_path = "index.csv"
+
+    # Vérifier si le fichier existe
+    file_exists = os.path.isfile(file_path)
+
+    # Si le fichier n'existe pas, on l'ouvre en mode 'w' pour créer l'en-tête
+    with open(file_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+
+        # Si le fichier n'existe pas, on écrit les en-têtes
+        if not file_exists:
+            writer.writerow(["N°", "Date", "Nom d'utilisateur Telegram", "Téléphone affiché sur Telegram", 
+                             "Numéro du contact", "Nom dans 'À qui j'ai l'honneur'", "Produit choisi", "Proposition de prix"])
+
+        # Récupérer les informations à sauvegarder dans le CSV
+        writer.writerow(data)
+
+# Fonction pour gérer le texte des messages et collecter les données
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Récupérer les informations de base
+    lang = context.user_data.get("lang", "fr")
+    name = update.message.text.strip()
+    context.user_data["name"] = name
+    username = update.message.from_user.username  # Nom d'utilisateur Telegram
+    phone_number = update.message.contact.phone_number if update.message.contact else "Non fourni"
+
+    thank_you = thank_you_texts.get(lang, thank_you_texts["fr"])
+    await update.message.reply_text(f"{thank_you} {name} ! ")
+
+    # Ajouter les données au CSV après la collecte du nom et du téléphone
+    data = [
+        len(open("indrx.csv", "r").readlines()) + 1,  # Numéro de ligne
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Date
+        username,  # Nom d'utilisateur Telegram
+        phone_number,  # Numéro affiché sur Telegram
+        "Non précisé",  # Numéro du contact à demander plus tard
+        name,  # Nom de l'utilisateur
+        "Non précisé",  # Produit choisi (sera ajouté plus tard)
+        "Non précisé"  # Proposition de prix (sera ajouté plus tard)
+    ]
+
+    save_to_csv(data)
+
+    # Afficher le menu des produits après avoir collecté ces données
+    keyboard = [
+        [InlineKeyboardButton(produits_text["villa"][lang], callback_data="villa")],
+        [InlineKeyboardButton(produits_text["garage"][lang], callback_data="garage")],
+        [InlineKeyboardButton(produits_text["terrain1"][lang], callback_data="terrain1")],
+        [InlineKeyboardButton(produits_text["terrain2"][lang], callback_data="terrain2")],
+        [InlineKeyboardButton(produits_text["terrain3"][lang], callback_data="terrain3")],
+        [InlineKeyboardButton("🔙 Revenir au Menu Langues", callback_data="start")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Veuillez choisir un Bien :", reply_markup=reply_markup)
+
+# Fonction pour gérer le choix du produit
+async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    product = query.data
+    lang = context.user_data.get("lang", "fr")
+    
+    # Enregistrer le produit choisi dans les données utilisateur
+    context.user_data["product"] = product
+
+    # Mettre à jour le fichier CSV avec le produit choisi
+    username = update.message.from_user.username  # Nom d'utilisateur Telegram
+    with open("index.csv", "r") as file:
+        rows = list(csv.reader(file))
+        for row in rows:
+            if row[2] == username:  # Trouver l'utilisateur dans le fichier CSV
+                row[6] = product  # Mettre à jour le produit choisi
+
+    # Enregistrer à nouveau dans le fichier CSV
+    save_to_csv(rows)
+
+    # Affichage des détails du produit
+    await query.edit_message_text(f"Produit {product} sélectionné. Voulez-vous proposer un prix ?")
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Proposer un prix", callback_data="propose_price")],
+        [InlineKeyboardButton("🔙 Revenir au Menu des Biens", callback_data="menu")]
+    ])
+    await query.edit_message_reply_markup(reply_markup=keyboard)
+
+# Fonction pour gérer la proposition de prix
+async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    lang = context.user_data.get("lang", "fr")
+    context.user_data["awaiting_price_proposal"] = True
+    prompt = ask_price_messages["propose_price_prompt"].get(lang, ask_price_messages["propose_price_prompt"]["fr"])
+    await query.edit_message_text(prompt)
+
+# Fonction pour enregistrer le prix proposé dans le CSV
+async def handle_text_messages_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("awaiting_price_proposal"):
+        try:
+            price = float(update.message.text)
+            context.user_data["awaiting_price_proposal"] = False
+            username = update.message.from_user.username  # Nom d'utilisateur Telegram
+
+            # Mise à jour du prix dans le CSV
+            with open("index.csv", "r") as file:
+                rows = list(csv.reader(file))
+                for row in rows:
+                    if row[2] == username:  # Trouver l'utilisateur dans le fichier CSV
+                        row[7] = price  # Mettre à jour la proposition de prix
+
+            # Enregistrer à nouveau dans le fichier CSV
+            save_to_csv(rows)
+
+            await update.message.reply_text(f"Merci pour votre proposition de {price:.2f} DH.")
+        except ValueError:
+            await update.message.reply_text("❗ Veuillez entrer un montant valide.")
+        return
