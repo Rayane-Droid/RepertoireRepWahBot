@@ -1,12 +1,26 @@
+# -*- coding: utf-8 -*-
 
+# ----------------- Importations des bibliothèques -----------------
 import logging
 import os
-
-from Dictionnaire import languages, welcome_texts, who_are_you_texts, thank_you_texts, property_fields
-
+import asyncio
+import csv
+from datetime import datetime
 from flask import Flask
 from threading import Thread
+from dotenv import load_dotenv
 
+# Importations des modules Telegram
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ChatAction
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters, Application
+
+# ----------------- Importation des textes multilingues et données produits -----------------
+from Dictionnaire import languages, welcome_texts, who_are_you_texts, choixproduit_text, thank_you_texts, produits_text, choixdproduit_text, ask_price_messages, revmenbien_texts, revmenlang_texts, monnaie_texts, Popospri_texts, etudier_texts, merci_texts, entrnumtel_texts, merciteleph_texts,  montvalid_texts, numtelvali_texts
+
+from produits import property_fields, property_details
+
+# ----------------- Partie Flask pour garder le bot actif (utile sur Replit) -----------------
 flask_app = Flask('')
 
 @flask_app.route('/')
@@ -17,229 +31,212 @@ def run():
     flask_app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
+    # Lancement du serveur Flask dans un thread séparé
     t = Thread(target=run)
     t.start()
 
-
-from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
-
-# Charger les variables d’environnement
+# ----------------- Initialisation du bot Telegram -----------------
+# Chargement des variables d'environnement depuis .env (notamment le token du bot)
 load_dotenv()
-
-# Récupérer le token depuis .env
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
     raise ValueError("Le token Telegram est introuvable dans le fichier .env")
 
+# Configuration des logs pour suivre les erreurs/info
 logging.basicConfig(level=logging.INFO)
+
+# Construction de l'application Telegram avec le token
 app = ApplicationBuilder().token(TOKEN).build()
 
-products = {
-    "villa": {
-        "title": "Villa",
-        "description": "Une belle villa spacieuse.",
-        "surface": "300 m²",
-        "address": "123 Rue de la Mer",
-        "location": "Ville A",
-        "photo_link": "https://link_to_photo_villa.com",
-        "video_link": "https://link_to_video_villa.com",
-        "price": "500,000€"
-    },
-    "garage": {
-        "title": "Garage",
-        "description": "Un garage spacieux pour 2 voitures.",
-        "surface": "50 m²",
-        "address": "456 Rue du Garage",
-        "location": "Ville B",
-        "photo_link": "https://link_to_photo_garage.com",
-        "video_link": "https://link_to_video_garage.com",
-        "price": "30,000€"
-    },
-    "terrain1": {
-        "title": "Terrain 1",
-        "description": "Terrain à bâtir dans un quartier calme.",
-        "surface": "1000 m²",
-        "address": "789 Rue du Terrain",
-        "location": "Ville C",
-        "photo_link": "https://link_to_photo_terrain1.com",
-        "video_link": "https://link_to_video_terrain1.com",
-        "price": "150,000€"
-    },
-    "terrain2": {
-        "title": "Terrain 2",
-        "description": "Grand terrain avec vue sur la montagne.",
-        "surface": "1500 m²",
-        "address": "101 Rue Montagne",
-        "location": "Ville D",
-        "photo_link": "https://link_to_photo_terrain2.com",
-        "video_link": "https://link_to_video_terrain2.com",
-        "price": "200,000€"
-    },
-    "terrain3": {
-        "title": "Terrain 3",
-        "description": "Terrain idéal pour un projet commercial.",
-        "surface": "2000 m²",
-        "address": "202 Rue Commerciale",
-        "location": "Ville E",
-        "photo_link": "https://link_to_photo_terrain3.com",
-        "video_link": "https://link_to_video_terrain3.com",
-        "price": "250,000€"
-    }
-}
+# ----------------- Définition des Handlers et Fonctions principales -----------------
 
-# 1. /start : Choix de la langue
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [[InlineKeyboardButton(name, callback_data=f"lang_{code}")] for code, name in languages.items()]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Bienvenue! Choisissez une langue / Choose a language", reply_markup=reply_markup)
-
-# 2. Callback langue choisie
-async def language_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    lang_code = query.data.split("_")[1]
-    context.user_data["language"] = lang_code
-    await query.answer()
-    await query.edit_message_text(welcome_texts[lang_code])
-    await query.message.reply_text(who_are_you_texts[lang_code])
-
-# 3. Récupération du nom
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if context.user_data.get("awaiting_price"):
-        await receive_price(update, context)
-    elif "user_name" not in context.user_data:
-        await receive_name(update, context)
-    else:
-        await update.message.reply_text("Revenir Au Menu Principale. /start")
-
-
-# 4. Afficher la liste des produits
-async def view_products(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
+# Handler pour la commande /start ou le bouton "start"
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Création d’un clavier avec les langues disponibles
     keyboard = [
-        [InlineKeyboardButton("Villa", callback_data="product_villa"),
-         InlineKeyboardButton("Garage", callback_data="product_garage")],
-        [InlineKeyboardButton("Terrain 1", callback_data="product_terrain1"),
-         InlineKeyboardButton("Terrain 2", callback_data="product_terrain2")],
-        [InlineKeyboardButton("Terrain 3", callback_data="product_terrain3")]
+        [InlineKeyboardButton(name, callback_data=code)]
+        for code, name in languages.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text("Choisissez un produit :", reply_markup=reply_markup)
 
-# 5. Détails d’un produit
-async def show_product_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    product_key = query.data.split("_")[1]
-    product = products.get(product_key)
+    # Affichage selon le type de mise à jour (message ou callback)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("👅 :", reply_markup=reply_markup)
+    elif update.message:
+        await update.message.reply_text("👅 :", reply_markup=reply_markup)
 
-    if product:
-        context.user_data["selected_product"] = product_key  # Stocker le produit choisi
-        details = (
-            f"🏠 *{product['title']}*\n\n"
-            f"*Description:* {product['description']}\n"
-            f"*Superficie:* {product['surface']}\n"
-            f"*Adresse:* {product['address']}\n"
-            f"*Localisation:* {product['location']}\n"
-            f"*Prix:* {product['price']}\n\n"
-            f"[📷 Voir la photo]({product['photo_link']}) | [🎥 Voir la vidéo]({product['video_link']})"
-        )
-        await query.answer()
-        await query.edit_message_text(details, parse_mode="Markdown", disable_web_page_preview=False)
-
-        # Boutons : retour + proposer un prix
-        keyboard = [
-            [InlineKeyboardButton("⬅️ Retour", callback_data="view_products")],
-            [InlineKeyboardButton("💰 Proposer un prix", callback_data="propose_price")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text("Que souhaitez-vous faire ?", reply_markup=reply_markup)
-
-# 6. Proposition du client
-async def propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# Handler appelé après le choix de la langue
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    lang = context.user_data.get("language", "fr")
 
-    messages = {
-        "fr": "Veuillez entrer votre prix proposé pour ce bien (€) :",
-        "en": "Please enter your proposed price for this property (€):",
-        "es": "Por favor ingrese su precio propuesto para esta propiedad (€):",
-        "de": "Bitte geben Sie Ihren vorgeschlagenen Preis für diese Immobilie ein (€):",
-        "ar": "يرجى إدخال السعر الذي تقترحه لهذا العقار (€):"
-    }
+    lang_code = query.data
+    context.user_data["lang"] = lang_code  # Stocke la langue choisie
 
-    await query.message.reply_text(messages[lang])
-    context.user_data["awaiting_price"] = True  # On attend le prix de l'utilisateur
+    welcome = welcome_texts[lang_code]
+    question = who_are_you_texts[lang_code]
 
-# 7. Réception du prix proposé
-async def receive_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if context.user_data.get("awaiting_price"):
-        proposed_price = update.message.text.strip()
-        lang = context.user_data.get("language", "fr")
-        product_key = context.user_data.get("selected_product", "inconnu")
-        user_name = context.user_data.get("user_name", "utilisateur")
+    await query.edit_message_text(f"{welcome}\n\n{question}")
 
-        # Tu peux enregistrer ce prix dans une base de données ici si nécessaire
+# Handler quand l'utilisateur clique sur "Donner un prix"
+async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    lang = context.user_data.get("lang", "fr")
+    context.user_data["awaiting_price_proposal"] = True  # Attend une entrée texte (le prix)
+    prompt = ask_price_messages["propose_price_prompt"].get(lang, ask_price_messages["propose_price_prompt"]["fr"])
 
-        confirmations = {
-            "fr": f"Merci {user_name}, vous avez proposé {proposed_price}€ pour le bien '{products[product_key]['title']}'. Nous vous contacterons bientôt.",
-            "en": f"Thank you {user_name}, you proposed {proposed_price}€ for the property '{products[product_key]['title']}'. We will contact you soon.",
-            "es": f"Gracias {user_name}, propuso {proposed_price}€ para la propiedad '{products[product_key]['title']}'. Nos pondremos en contacto con usted pronto.",
-            "de": f"Vielen Dank {user_name}, Sie haben {proposed_price}€ für die Immobilie '{products[product_key]['title']}' vorgeschlagen. Wir werden Sie bald kontaktieren.",
-            "ar": f"شكراً {user_name}، لقد اقترحت {proposed_price}€ للعقار '{products[product_key]['title']}'. سنتواصل معك قريباً."
-        }
+    await query.edit_message_text(prompt)
+    return
+    
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Cas où l'on attend un prix
+    if context.user_data.get("awaiting_price_proposal"):
+        try:
+            prix = float(update.message.text)
+            context.user_data["awaiting_price_proposal"] = False
+            await update.message.reply_text(
+                f"Merci pour votre proposition de {prix:.2f} DH. Nous allons l'étudier et vous contacter."
+            )
+        except ValueError:
+            await update.message.reply_text("❗ Veuillez entrer un montant valide.")
+        return
 
-        await update.message.reply_text(confirmations[lang])
-        context.user_data["awaiting_price"] = False  # Réinitialiser l'état
-    else:
-        # Si l'utilisateur envoie un message sans que le bot attende un prix
-        await update.message.reply_text("Veuillez commencer avec /start ou sélectionner une option.")
+    # Cas où l'on attend un numéro de téléphone
+    if context.user_data.get("awaiting_phone_number"):
+        phone_number = update.message.text.strip()
+        if phone_number.isdigit() and 8 <= len(phone_number) <= 15:
+            context.user_data["phone_number"] = phone_number
+            context.user_data["awaiting_phone_number"] = False
+            await update.message.reply_text("✅ Merci, votre numéro a bien été enregistré.")
 
-# 8. Réception du nom de l'utilisateur
-async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_name = update.message.text.strip()
-    context.user_data["user_name"] = user_name
-    lang = context.user_data.get("language", "fr")
+            # Affichage du menu uniquement maintenant
+            lang = context.user_data.get("lang", "fr")
+            keyboard = [
+                [InlineKeyboardButton(produits_text["villa"][lang], callback_data="villa")],
+                [InlineKeyboardButton(produits_text["garage"][lang], callback_data="garage")],
+                [InlineKeyboardButton(produits_text["terrain1"][lang], callback_data="terrain1")],
+                [InlineKeyboardButton(produits_text["terrain2"][lang], callback_data="terrain2")],
+                [InlineKeyboardButton(produits_text["terrain3"][lang], callback_data="terrain3")],
+                [InlineKeyboardButton(
+                    revmenlang_texts.get(lang, revmenlang_texts["fr"]),
+                    callback_data="start"
+                )]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Veuillez choisir un Bien :", reply_markup=reply_markup)
+        else:
+            await update.message.reply_text("❗ Numéro invalide. Veuillez entrer un numéro de téléphone valide (8 à 15 chiffres).")
+        return
 
-    await update.message.reply_text(f"{thank_you_texts[lang]} {user_name} 🙏")
+    # Sinon, on suppose que c’est le nom de l’utilisateur
+    lang = context.user_data.get("lang", "fr")
+    name = update.message.text.strip()
+    context.user_data["name"] = name
 
-    # Affiche les produits disponibles
+    thank_you = thank_you_texts.get(lang, thank_you_texts["fr"])
+    await update.message.reply_text(f"{thank_you} {name} !")
+
+    # → On demande le numéro maintenant, le menu sera affiché ensuite
+    await update.message.reply_text("📞 Veuillez maintenant entrer votre numéro de téléphone :")
+    context.user_data["awaiting_phone_number"] = True
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get("lang", "fr")
+    message = choixproduit_text.get(lang, "Veuillez choisir un Bien.")
+
     keyboard = [
-        [InlineKeyboardButton("Voir les produits disponibles", callback_data="view_products")]
+        [InlineKeyboardButton(produits_text["villa"][lang], callback_data="villa")],
+        [InlineKeyboardButton(produits_text["garage"][lang], callback_data="garage")],
+        [InlineKeyboardButton(produits_text["terrain1"][lang], callback_data="terrain1")],
+        [InlineKeyboardButton(produits_text["terrain2"][lang], callback_data="terrain2")],
+        [InlineKeyboardButton(produits_text["terrain3"][lang], callback_data="terrain3")],
+        [InlineKeyboardButton(
+            revmenlang_texts.get(lang, revmenlang_texts["fr"]),
+            callback_data="start"
+        )]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Cliquez ci-dessous pour voir nos biens disponibles :", reply_markup=reply_markup)
 
+    if update.message:
+        await update.message.reply_text(message, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(message, reply_markup=reply_markup)
+        
+# Handler pour revenir au menu principal
+async def handle_return_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Bouton 'Revenir Au Menu' cliqué")
+    query = update.callback_query
+    await query.answer()
+    await menu(update, context)
 
-# Enregistre les gestionnaires
+# Handler quand l’utilisateur choisit un produit (villa, garage, terrain...)
+async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    product = query.data
+    lang = context.user_data.get("lang", "fr")
+
+    # Récupération des détails du produit
+    choix_text = choixdproduit_text.get(lang, choixdproduit_text["fr"])
+    product_label = produits_text.get(product, {}).get(lang, product)
+    details = property_details.get(product, {})
+
+    # Données spécifiques au bien
+    title = details.get("title", {}).get(lang, "N/A")
+    description = details.get("description", {}).get(lang, "N/A")
+    address = details.get("address", {}).get(lang, "N/A")
+    surface = details.get("surface", {}).get(lang, "N/A")
+    location = details.get("location", {}).get(lang, "N/A")
+    photo_link = details.get("photo_link", {}).get(lang, "N/A")
+    video_link = details.get("video_link", {}).get(lang, "N/A")
+    price = details.get("price", {}).get(lang, "N/A")
+
+    # Création de la réponse
+    message = (
+        f"{choix_text} {product_label}.\n\n"
+        f"{property_fields['📝 title'][lang]}: {title}\n"
+        f"{property_fields['🗒️ description'][lang]}: {description}\n"
+        f"{property_fields['🏠 address'][lang]}: {address}\n"
+        f"{property_fields['📏 surface'][lang]}: {surface}\n"
+        f"{property_fields['📍 Géolocalisation'][lang]}: {location}\n"
+        f"{property_fields['💰 price'][lang]}: {price}\n"
+        f"{property_fields['📸 Photo_link'][lang]}: {photo_link}\n"
+        f"{property_fields['🎥 video_link'][lang]}: {video_link}\n"
+    )
+
+    # Affichage du message avec un petit délai
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await asyncio.sleep(0)
+    await query.edit_message_text(message)
+    await asyncio.sleep(0)
+
+    # Affichage des options après visualisation du produit
+    reply_markup = InlineKeyboardMarkup([
+        # [InlineKeyboardButton("✅ Donner un prix en : ( 🇲🇦💰 Dirham marocain ) ", callback_data="propose_price")],
+        [InlineKeyboardButton(
+            f"✅ {Popospri_texts.get(lang, Popospri_texts['fr'])} {monnaie_texts.get(lang, monnaie_texts['fr'])}",
+            callback_data="propose_price")],
+        [InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
+    ])
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
+
+# Affiche le menu des biens à tout moment
+
+# ----------------- Enregistrement des Handlers -----------------
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(language_choice, pattern="^lang_"))
-app.add_handler(CallbackQueryHandler(view_products, pattern="^view_products$"))
-app.add_handler(CallbackQueryHandler(show_product_details, pattern="^product_"))
-app.add_handler(CallbackQueryHandler(propose_price, pattern="^propose_price$"))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_price))
+app.add_handler(CommandHandler("menu", menu))
+app.add_handler(CallbackQueryHandler(set_language, pattern="^(" + "|".join(languages.keys()) + ")$"))
+app.add_handler(CallbackQueryHandler(handle_propose_price, pattern="^propose_price$"))
+app.add_handler(CallbackQueryHandler(handle_return_to_menu, pattern="^menu$"))
+app.add_handler(CallbackQueryHandler(handle_product_selection, pattern="^(villa|garage|terrain1|terrain2|terrain3)$"))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+app.add_handler(CallbackQueryHandler(start, pattern="^start$"))  # Redémarre depuis le début
 
-# Lancement de l'application
+# ----------------- Démarrage du Bot -----------------
 if __name__ == "__main__":
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(language_choice, pattern="^lang_"))
-    app.add_handler(CallbackQueryHandler(view_products, pattern="^view_products$"))
-    app.add_handler(CallbackQueryHandler(show_product_details, pattern="^product_"))
-    app.add_handler(CallbackQueryHandler(propose_price, pattern="^propose_price$"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    print("Bot is running...")
-    keep_alive()
-    app.run_polling()
+    keep_alive()  # Lance Flask dans un thread pour maintenir le bot actif
+    app.run_polling()  # Démarre le bot Telegram en mode polling
+    
