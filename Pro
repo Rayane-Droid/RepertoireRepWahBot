@@ -1,0 +1,38 @@
+Je veux créer un bot télégramme 
+Pour le Vente de 5 biens : Villa garage ter1 ter2 et ter3
+1. La première chose
+1.1 menu des langues pour Choix de langue 👅 fr en es al it ar 
+1.2 Ces boutons contient un drapeau avec la langue dans son langue (comme ar soit en arabe).
+1.3 si le client écrit n'importe quoi a la présent de menu des langues ce menu doit être reaffiche 
+2. Message de bien venu 
+2.1 Demande de saisir le (nom)
+2.2 Bien Venu (nom) veuillez saisir votre (numéro) de téléphone 
+2.3 Message de validation : Merci (nom) (numéro) veuillez choisir un bien
+3. Un menu des biens apparaît pour Choix des biens
+3.1 si le client écrit n'importe quoi a la présent de menu biens ce men doit être reaffiche
+4. Chaque clique sur le bouton d'un bien apparaît des détails : titre, adresse description, localisation, superficie prix lien photo et lien vidéo 
+5. Après l'etape 4. deux boutons apparaît 
+5.1 Bouton Proposition de prix 
+Après clique sur 5.1 un Message apparaît 
+"Veuillez saisir votre proposition"
+Le client saisie son proposition de prix en (dirhams marocain) soit/ m2 soit en globale 
+Les caractères hors chiffre ne doivent pas être accepté 
+5.2 Bouton retour au menu des biens 
+- N'oublie les icône comme drapeau maison garage price loc Localisation ...
+- Tous les données et les boutons aussi doivent être traduit selon la langue choisi 
+- n'oublie pas aussi les commentaires 
+- faire introduire les données dans un fichier csv
+- le token se trouve dans un fichier .env
+- il faut prévoir se code car j'ai hébergé mon code dans le site web replit : 
+flask_app = Flask('')
+
+@flask_app.route('/')
+def home():
+    return "Le bot Telegram est actif."
+
+def run():
+    flask_app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
