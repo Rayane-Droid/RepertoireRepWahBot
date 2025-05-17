@@ -18,24 +18,21 @@ import os
 from dotenv import load_dotenv
 
 from keep_alive import keep_alive, app
-
-from Dictionnaire1 import languages, 
+from Dictionnaire1 import languages,
 welcome_texts, who_are_you_texts,
 thank_you_texts, choixdproduit_text,
-ask_price_messages, revmenbien_texts,
-monnaie_texts, Popospri_texts,
-entrnumtel_texts, mercitel_texts, 
-montantvalid_texts, numvalid_texts, 
+revmenbien_texts, monnaie_texts, 
+Popospri_texts, entrnumtel_texts,
+mercitel_texts, numvalid_texts, 
 mercicom_texts, merci_prix_texts, 
-choixbiens_texts, paydet_texts, 
-pascompris_texts, 
+choixbiens_texts, paydet_texts,
+pascompris_texts, laisecom_texts,
+choixbien_texts, 
+montantvalid_texts, ask_price_messages,
+propositionvalid_texts 
+#,choixlangr_texts, choixproduit_text,
+commentaires_texts
 
-commentaires_texts, 
-laisecom_texts, 
-
-choixbien_texts
-#,choixlangr_texts, selectionlangue_texts,
-choixproduit_text, 
 
 from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts #, erreurenrdone_texts, ressayer_texts
 from Dictionnaire3 import description_texts
@@ -467,7 +464,7 @@ async def handle_add_comment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["awaiting_comment"] = True
 
     try:
-        await query.edit_message_text(commentaires_texts.get(lang, commentaires_texts["fr"]))
+        await query.edit_message_text(laisecom_texts.get(lang, laisecom_texts["fr"]))
     except Exception as e:
         logger.error(f"Error in handle_add_comment: {e}")
 # ✅ 14. Commande pour afficher la politique de confidentialité dans la langue de l'utilisateur.
