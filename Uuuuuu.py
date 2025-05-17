@@ -1,36 +1,68 @@
-import asyncio
+
+#import asyncio
 import csv
 import logging
+import pycountry
+import phonenumbers
+from phonenumbers import NumberParseException
 from datetime import datetime
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.constants import ChatAction
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.error import BadRequest
 
+import os
+from dotenv import load_dotenv
+
 from keep_alive import keep_alive, app
-
-from Dictionnaire1 import languages, welcome_texts, who_are_you_texts, thank_you_texts, choixdproduit_text, ask_price_messages, revmenbien_texts, monnaie_texts, Popospri_texts, entrnumtel_texts, mercitel_texts, choixbien_texts, commentaires_texts, montantvalid_texts, numvalid_texts, mercicom_texts, merci_prix_texts, laisecom_texts, choixbiens_texts, paydet_texts, pascompris_texts, choixlangr_texts, choixproduit_text 
-#choixlangs_texts,
-
-from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts, mesagevide_texts, erreurenrdone_texts, ressayer_texts
+from Dictionnaire1 import languages, welcome_texts, who_are_you_texts, thank_you_texts, choixdproduit_text, ask_price_messages, revmenbien_texts, monnaie_texts, Popospri_texts, entrnumtel_texts, mercitel_texts, montantvalid_texts, numvalid_texts, mercicom_texts, merci_prix_texts, choixbiens_texts, paydet_texts, pascompris_texts, commentaires_texts, laisecom_texts, choixbien_texts #,choixlangr_texts, choixproduit_text, 
+from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts #, erreurenrdone_texts, ressayer_texts
 from Dictionnaire3 import description_texts
 from produits import property_fields, property_details, produits_text
-
 from fonctionne import generate_menu_keyboard
+from messages import confirmation_messages, error_messages, reset_message, mesagevide_texts
+#, thank_you_messages, phone_number_prompt
 
-import phonenumbers
-from phonenumbers import NumberParseException
 
-import pycountry
+logger = logging.getLogger(__name__)
 
+# Logger
 # Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO
 )
-logger = logging.getLogger(__name__)
 
-# 01. Start handler
+# Charger les variables depuis .env
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_NAME = os.getenv("BOT_NAME")
+BOT_DESCRIPTION = os.getenv("BOT_DESCRIPTION")
+BOT_SHORT_DESCRIPTION = os.getenv("BOT_SHORT_DESCRIPTION")
+
+def initialize_bot_identity(bot_token):
+    try:
+        bot = Bot(token=bot_token)
+
+        # Appliquer les paramètres
+        bot.set_my_name(name=BOT_NAME)
+        bot.set_my_description(description=BOT_DESCRIPTION)
+        bot.set_my_short_description(short_description=BOT_SHORT_DESCRIPTION)
+
+        # Vérification (facultatif)
+        logging.info(f"Nom actuel : {bot.get_my_name()}")
+        logging.info(f"Description actuelle : {bot.get_my_description()}")
+        logging.info(f"Description courte : {bot.get_my_short_description()}")
+
+    except Exception as e:
+        logging.error(f"Erreur lors de l'initialisation du bot : {e}")
+
+
+
+
+
+# ✅ 01. Start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     keyboard = [[InlineKeyboardButton(name, callback_data=code)]
@@ -45,7 +77,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("👅 🌍 :", reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
-# 02. Language selection handler
+# ✅ 02. Language selection handler
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -76,7 +108,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(description_msg, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Error in set_language handler (description message): {e}")
-# 03. Handler after description to send welcome message
+# ✅ 03. Handler after description to send welcome message
 async def continue_after_description_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -91,7 +123,7 @@ async def continue_after_description_handler(update: Update, context: ContextTyp
         await query.edit_message_text(f"{welcome}\n\n{question}")
     except Exception as e:
         logger.error(f"Error in continue_after_description_handler: {e}")
-# 04. Handle propose price button
+# ✅ 04. Handle propose price button
 async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -105,20 +137,51 @@ async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(prompt)
     except Exception as e:
         logger.error(f"Error in handle_propose_price handler: {e}")
-# 05.
+# ✅ 05. Affiche un menu de sélection de langue avec des boutons pour chaque langue disponible.
 async def show_language_menu(update, context):
     keyboard = [[InlineKeyboardButton(name, callback_data=code)] for code, name in languages.items()]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("👅 🌍 :", reply_markup=reply_markup)
-# 06. Text message handler with enhanced error handling and validation
+# ✅ 06. Mise à jour du handler des messages textes pour gérer laisse commentaire final puis enregistrer et afficher menu
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip() if update.message and update.message.text else ""
     lang = context.user_data.get("lang", "fr")
 
+    # Si on attend le commentaire final après validation prix
+    if context.user_data.get("awaiting_final_comment"):
+        context.user_data["awaiting_final_comment"] = False
+        context.user_data["commentaire"] = text  # enregistre le commentaire final
+
+        user_id = update.effective_user.id
+        name = context.user_data.get("name", "")
+        phone = context.user_data.get("phone_number", "")
+        produit = context.user_data.get("produit_choisi", "")
+        prix = context.user_data.get("proposed_price", "")
+        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        commentaire = context.user_data.get("commentaire", "")
+
+        # Sauvegarder dans index.csv la validation finale avec commentaire
+        try:
+            with open("index.csv", mode="a", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow([date, user_id, name, phone, produit, prix, commentaire, "validé"])
+        except Exception as e:
+            logger.error(f"Error writing to CSV: {e}")
+            await update.message.reply_text("❗ Une erreur est survenue lors de l'enregistrement des données.")
+
+        # Afficher le menu des biens après commentaire
+        keyboard = generate_menu_keyboard(lang)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(choixbien_texts.get(lang, choixbien_texts["fr"]), reply_markup=reply_markup)
+        context.user_data["menu_biens_affiche"] = True
+        return
+
+    # (le reste du handler classique suit ici... Copie du code précédent 'handle_text_messages'...)
+
     # Check if user is at description step, if so, redisplay description and ignore text input
     if context.user_data.get("at_description"):
         description_msg = description_texts.get(lang, description_texts["fr"])
-        lang = context.user_data.get("lang", "fr")  # Défaut : français
         keyboard = [
             [InlineKeyboardButton(continue_texts[lang], callback_data="continue_after_description")]
 ]
@@ -127,7 +190,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if not text:
-        await update.message.reply_text("❗ Message vide. Veuillez entrer un texte.")
+      #  await update.message.reply_text("❗ Message vide. Veuillez entrer un texte.")
+        await update.message.reply_text(mesagevide_texts.get(lang, mesagevide_texts["fr"]))
         return
 
     text_lower = text.lower()
@@ -138,7 +202,9 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             context.user_data.clear()
             keyboard = [[InlineKeyboardButton(name, callback_data=code)] for code, name in languages.items()]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("🔄 Conversation réinitialisée. Veuillez choisir une langue.")
+            #await update.message.reply_text("🔄 Conversation réinitialisée. Veuillez choisir une langue.")
+            #reset_message
+            await update.message.reply_text(reset_message.get(lang, reset_message["fr"]))
             await show_language_menu(update, context)
             return
 
@@ -147,6 +213,8 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             keyboard = [[InlineKeyboardButton(name, callback_data=code)] for code, name in languages.items()]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
+                "🇲🇦\n"
+                "❗ يرجى أولاً اختيار لغة بالنقر على أحد الأزرار أدناه.\n" 
                 "🇫🇷\n"
                 "❗ Veuillez d'abord sélectionner une langue en cliquant sur un des boutons ci-dessous.\n"
                 "🇬🇧\n"
@@ -156,9 +224,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
                 "🇩🇪\n"
                 "❗ Bitte wählen Sie zuerst eine Sprache, indem Sie auf einen der untenstehenden Buttons klicken.\n"
                 "🇮🇹\n"
-                "❗ Seleziona prima una lingua cliccando su uno dei pulsanti qui sotto.\n"
-                "🇲🇦\n"
-                "❗ يرجى أولاً اختيار لغة بالنقر على أحد الأزرار أدناه."               
+                "❗ Seleziona prima una lingua cliccando su uno dei pulsanti qui sotto."      
             )
             await show_language_menu(update, context)
             context.user_data["menu_langue_affiche"] = True
@@ -270,21 +336,23 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Exception as e:
         logger.error(f"Error in handle_text_messages: {e}")
-        await update.message.reply_text("❗ Une erreur est survenue. Veuillez réessayer.")
-# 07.
+       # await update.message.reply_text("❗ Une erreur est survenue. Veuillez réessayer.")
+       # error_messages
+        await update.message.reply_text(error_messages.get(lang, error_messages["fr"]))
+# ✅ 07. Récupère le nom complet d'un pays à partir de son code ISO alpha-2 (ex : "FR" → "France")
 def get_country_name(iso_code):
     try:
         country = pycountry.countries.get(alpha_2=iso_code)
         return country.name if country else iso_code
     except:
         return iso_code
-# 08.
+# ✅ 08. Génère l'emoji du drapeau à partir du code de pays (ex : "FR" → 🇫🇷)
 def get_flag_emoji(country_code):
     try:
         return ''.join(chr(0x1F1E6 + ord(c.upper()) - ord('A')) for c in country_code)
     except:
         return ''
-# 09. Fallback handler for unsupported messages
+# ✅ 09. Fallback handler for unsupported messages
 async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get("lang", "fr")  # récupérer la langue utilisateur (par défaut fr)
     message = pascompris_texts.get(lang, pascompris_texts["fr"])
@@ -296,7 +364,7 @@ async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.edit_message_text(message)
     except Exception as e:
         logger.error(f"Error in fallback_handler: {e}")
-# 10. Product selection handler
+# ✅ 10. Product selection handler
 async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -336,7 +404,9 @@ async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT
         logger.error(f"Error sending product details: {e}")
 
     reply_markup = InlineKeyboardMarkup([
+        #
         [InlineKeyboardButton(f"✅ {Popospri_texts.get(lang, Popospri_texts['fr'])} {monnaie_texts.get(lang, monnaie_texts['fr'])}", callback_data="propose_price")],
+        [InlineKeyboardButton("✅ Valider", callback_data="validate_price")],  # Nouveau bouton "Valider"
         [InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
     ])
 
@@ -344,7 +414,7 @@ async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_reply_markup(reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Error setting reply markup after product selection: {e}")
-# 11. Menu handler displays list of products
+# ✅ 11. Menu handler displays list of products
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get("lang", "fr")
     message = choixbien_texts.get(lang, choixbien_texts["fr"])  # Utilise le bon dictionnaire
@@ -358,7 +428,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.edit_message_text(message, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Error in menu handler: {e}")
-# 12. Handler for returning to menu
+# ✅ 12. Handler for returning to menu
 async def handle_return_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Bouton 'Revenir Au Menu' cliqué")
     query = update.callback_query
@@ -369,7 +439,7 @@ async def handle_return_to_menu(update: Update, context: ContextTypes.DEFAULT_TY
         logger.warning(f"Erreur dans query.answer() : {e}")
 
     await menu(update, context)
-# 13. Handler for adding comment
+# ✅ 13. Handler for adding comment
 async def handle_add_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -380,17 +450,39 @@ async def handle_add_comment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(commentaires_texts.get(lang, commentaires_texts["fr"]))
     except Exception as e:
         logger.error(f"Error in handle_add_comment: {e}")
-# 14. Handler for unknown commands
-async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = context.user_data.get('lang', 'fr')  # Langue par défaut : français
-    msg = commandeincon_texts.get(lang, commandeincon_texts['fr'])
-    await update.message.reply_text(msg)
-# 15.
+# ✅ 14. Commande pour afficher la politique de confidentialité dans la langue de l'utilisateur.
 async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = context.user_data.get("lang", "fr")  # Langue par défaut : français
     message = privacy_texts.get(lang, privacy_texts["fr"])
     await update.message.reply_text(message)
-# 16. Register handlers
+# ✅ 15. Handler for validating the price
+async def handle_validate_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    lang = context.user_data.get("lang", "fr")
+    proposed_price = context.user_data.get("proposed_price")
+
+    # Message fixe à envoyer
+    confirmation_message = confirmation_messages.get(lang, confirmation_messages["fr"])
+    try:
+        await query.edit_message_text(confirmation_message)
+    except Exception as e:
+        logger.error(f"Error editing message on validate_price: {e}")
+
+    # Enregistrer la validation dans index.csv plus tard (après commentaire)
+    # On va demander à l'utilisateur un commentaire (laisser commentaire),
+    # donc mettre un flag awaiting_final_comment = True
+    context.user_data["awaiting_final_comment"] = True
+
+    # Envoyer message laisecom_texts pour inviter à laisser commentaire
+    await query.message.reply_text(laisecom_texts.get(lang, laisecom_texts["fr"]))
+# ✅ 16. Handler for unknown commands
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'fr')  # Langue par défaut : français
+    msg = commandeincon_texts.get(lang, commandeincon_texts['fr'])
+    await update.message.reply_text(msg)
+# ✅ 17. Register handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("menu", menu))
 app.add_handler(CallbackQueryHandler(set_language, pattern="^(" + "|".join(languages.keys()) + ")$"))
@@ -402,15 +494,14 @@ app.add_handler(CallbackQueryHandler(start, pattern="^start$"))
 app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 app.add_handler(MessageHandler(filters.ALL, fallback_handler))
 app.add_handler(CallbackQueryHandler(handle_add_comment, pattern="add_comment"))
-app.add_handler(CommandHandler("privacy", privacy_command))  # commande /privacy
+app.add_handler(CommandHandler("privacy", privacy_command)) # commande/privacy
 app.add_handler(CallbackQueryHandler(continue_after_description_handler, pattern="^continue_after_description$"))
 app.add_handler(CommandHandler("privacy", privacy_command))
 app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-
-
-
-
-# 17. Main bot entry point
+app.add_handler(CallbackQueryHandler(handle_validate_price, pattern="^validate_price$"))
+# ✅28. Main bot entry point
 if __name__ == "__main__":
+    initialize_bot_identity(BOT_TOKEN)
     keep_alive()
-    asyncio.run(app.run_polling())
+    #asyncio.run(app.run_polling())
+    app.run_polling()
