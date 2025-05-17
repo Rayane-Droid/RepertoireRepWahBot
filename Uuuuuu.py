@@ -252,7 +252,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             try:
                 prix = float(text.replace(",", "."))
             except ValueError:
-                await update.message.reply_text(montantvalid_texts.get(lang, montantvalid_texts["fr"]))
+                await update.message.reply_text(propositionvalid_texts.get(lang, propositionvalid_texts["fr"]))
                 return
             context.user_data["awaiting_price_proposal"] = False
             context.user_data["proposed_price"] = prix
