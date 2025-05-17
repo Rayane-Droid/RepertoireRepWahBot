@@ -18,7 +18,25 @@ import os
 from dotenv import load_dotenv
 
 from keep_alive import keep_alive, app
-from Dictionnaire1 import languages, welcome_texts, who_are_you_texts, thank_you_texts, choixdproduit_text, ask_price_messages, revmenbien_texts, monnaie_texts, Popospri_texts, entrnumtel_texts, mercitel_texts, montantvalid_texts, numvalid_texts, mercicom_texts, merci_prix_texts, choixbiens_texts, paydet_texts, pascompris_texts, commentaires_texts, laisecom_texts, choixbien_texts #,choixlangr_texts, choixproduit_text, 
+
+from Dictionnaire1 import languages, 
+welcome_texts, who_are_you_texts,
+thank_you_texts, choixdproduit_text,
+ask_price_messages, revmenbien_texts,
+monnaie_texts, Popospri_texts,
+entrnumtel_texts, mercitel_texts, 
+montantvalid_texts, numvalid_texts, 
+mercicom_texts, merci_prix_texts, 
+choixbiens_texts, paydet_texts, 
+pascompris_texts, 
+
+commentaires_texts, 
+laisecom_texts, 
+
+choixbien_texts
+#,choixlangr_texts, selectionlangue_texts,
+choixproduit_text, 
+
 from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts #, erreurenrdone_texts, ressayer_texts
 from Dictionnaire3 import description_texts
 from produits import property_fields, property_details, produits_text
