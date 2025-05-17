@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 
+# ----------------- Importations des bibliothèques -----------------
 #import asyncio
 import csv
 import logging
