@@ -148,7 +148,7 @@ async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data = {}
     lang = context.user_data.get("lang", "fr")
     context.user_data["awaiting_price_proposal"] = True
-    prompt = ask_price_messages["propose_price_prompt"].get(lang, ask_price_messages["propose_price_prompt"]["fr"])
+    prompt = propositionvalid_texts["propose_price_prompt"].get(lang, propositionvalid_texts["propose_price_prompt"]["fr"])
 
     try:
         await query.edit_message_text(prompt)
