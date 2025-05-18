@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+
+# ----------------- Importations des bibliothèques -----------------
 import asyncio
 import csv
 import logging
@@ -383,8 +386,19 @@ async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT
     # Création du clavier pour les actions sur le produit
     reply_markup = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"✅ {Popospri_texts.get(lang, Popospri_texts['fr'])} {monnaie_texts.get(lang, monnaie_texts['fr'])}", callback_data="propose_price")],
-        [InlineKeyboardButton("✅ Valider", callback_data="validate_price")],
-        [InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
+      #  [InlineKeyboardButton("✅ Valider", callback_data="validate_price")],
+       
+
+        [InlineKeyboardButton(f"✅ {valider_texts.get(lang, valider_texts['fr'])} 
+        
+
+
+
+
+
+
+
+[InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
     ])
 
     try:
