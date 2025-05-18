@@ -1,0 +1,435 @@
+import asyncio
+import csv
+import logging
+import pycountry
+import phonenumbers
+from phonenumbers import NumberParseException
+from datetime import datetime
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.constants import ChatAction
+from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+from telegram.error import BadRequest
+
+import os
+from dotenv import load_dotenv
+
+from keep_alive import keep_alive, app
+from Dictionnaire1 import languages, welcome_texts, who_are_you_texts, thank_you_texts, choixdproduit_text, ask_price_messages, revmenbien_texts, monnaie_texts, Popospri_texts, entrnumtel_texts, mercitel_texts, montantvalid_texts, numvalid_texts, mercicom_texts, merci_prix_texts, choixbiens_texts, paydet_texts, pascompris_texts, laisecom_texts, revmenlang_texts, choixlangr_texts, choixproduit_text, choixbien_texts
+from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts, erreurenrdone_texts, ressayer_texts
+from Dictionnaire3 import description_texts
+from produits import property_fields, property_details, produits_text
+from fonctionne import generate_menu_keyboard
+from messages import confirmation_messages, error_messages, reset_message, mesagevide_texts
+
+# Configuration du logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Charger les variables depuis .env
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_NAME = os.getenv("BOT_NAME")
+BOT_DESCRIPTION = os.getenv("BOT_DESCRIPTION")
+BOT_SHORT_DESCRIPTION = os.getenv("BOT_SHORT_DESCRIPTION")
+
+def initialize_bot_identity(bot_token):
+    """Initialise l'identité du bot avec son nom et sa description."""
+    try:
+        bot = Bot(token=bot_token)
+        bot.set_my_name(name=BOT_NAME)
+        bot.set_my_description(description=BOT_DESCRIPTION)
+        bot.set_my_short_description(short_description=BOT_SHORT_DESCRIPTION)
+
+        # Vérification (facultatif)
+        logging.info(f"Nom actuel : {bot.get_my_name()}")
+        logging.info(f"Description actuelle : {bot.get_my_description()}")
+        logging.info(f"Description courte : {bot.get_my_short_description()}")
+
+    except Exception as e:
+        logging.error(f"Erreur lors de l'initialisation du bot : {e}")
+
+async def send_message(update, context, message_key):
+    """Envoie un message à l'utilisateur en fonction de la clé et de la langue."""
+    lang = context.user_data.get("lang", "fr")
+    message = get_text(message_key, lang)
+    await update.message.reply_text(message)
+
+def get_text(key, lang):
+    """Récupère le texte en fonction de la clé et de la langue."""
+    return texts[key].get(lang, texts[key]["fr"])
+
+# ✅ 01. Handler de démarrage
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour le démarrage du bot."""
+    context.user_data.clear()
+    keyboard = [[InlineKeyboardButton(name, callback_data=code) for code, name in languages.items()]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        if update.callback_query:  # Si c'est une requête de callback
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text("👅 🌍 :", reply_markup=reply_markup)
+        elif update.message:  # Si c'est un message
+            await update.message.reply_text("👅 🌍 :", reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error in start handler: {e}")
+
+# ✅ 02. Handler de sélection de langue
+async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour la sélection de la langue."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "start":  # Si l'utilisateur veut recommencer
+        context.user_data.clear()
+        keyboard = [[InlineKeyboardButton(name, callback_data=code) for code, name in languages.items()]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("👅 🌍 :", reply_markup=reply_markup)
+        return
+
+    lang_code = query.data
+    context.user_data["lang"] = lang_code
+    context.user_data["at_description"] = True
+
+    description_msg = description_texts.get(lang_code, description_texts["fr"])
+    lang = context.user_data.get("lang", "fr")
+    keyboard = [
+        [InlineKeyboardButton(continue_texts[lang], callback_data="continue_after_description")],
+        [InlineKeyboardButton(revmenlang_texts.get(lang, revmenlang_texts["fr"]), callback_data="start")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        await query.edit_message_text(description_msg, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error in set_language handler (description message): {e}")
+
+# ✅ 03. Handler après la description pour envoyer un message de bienvenue
+async def continue_after_description_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour continuer après la description et envoyer un message de bienvenue."""
+    query = update.callback_query
+    await query.answer()
+    lang_code = context.user_data.get("lang", "fr")
+    welcome = welcome_texts.get(lang_code, welcome_texts["fr"])
+    question = who_are_you_texts.get(lang_code, who_are_you_texts["fr"])
+
+    context.user_data["at_description"] = False
+
+    try:
+        await query.edit_message_text(f"{welcome}\n\n{question}")
+    except Exception as e:
+        logger.error(f"Error in continue_after_description_handler: {e}")
+
+# ✅ 04. Handler pour le bouton de proposition de prix
+async def handle_propose_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour gérer la proposition de prix."""
+    query = update.callback_query
+    await query.answer()
+    if context.user_data is None:
+        context.user_data = {}
+    lang = context.user_data.get("lang", "fr")
+    context.user_data["awaiting_price_proposal"] = True
+    prompt = ask_price_messages["propose_price_prompt"].get(lang, ask_price_messages["propose_price_prompt"]["fr"])
+
+    try:
+        await query.edit_message_text(prompt)
+    except Exception as e:
+        logger.error(f"Error in handle_propose_price handler: {e}")
+
+# ✅ 05. Affiche un menu de sélection de langue avec des boutons pour chaque langue disponible.
+async def show_language_menu(update, context):
+    """Affiche le menu de sélection de langue."""
+    keyboard = [[InlineKeyboardButton(name, callback_data=code) for code, name in languages.items()]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👅 🌍 :", reply_markup=reply_markup)
+
+# ✅ 06. Mise à jour du handler des messages textes pour gérer le commentaire final puis enregistrer et afficher le menu
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour gérer les messages textes de l'utilisateur."""
+    text = update.message.text.strip() if update.message and update.message.text else ""
+    lang = context.user_data.get("lang", "fr")
+
+    if context.user_data.get("awaiting_final_comment"):  # Si on attend le commentaire final
+        context.user_data["awaiting_final_comment"] = False
+        context.user_data["commentaire"] = text  # Enregistre le commentaire final
+
+        user_id = update.effective_user.id
+        name = context.user_data.get("name", "")
+        phone = context.user_data.get("phone_number", "")
+        produit = context.user_data.get("produit_choisi", "")
+        prix = context.user_data.get("proposed_price", "")
+        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        commentaire = context.user_data.get("commentaire", "")
+
+        # Sauvegarder dans index.csv la validation finale avec commentaire
+        try:
+            with open("index.csv", mode="a", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow([date, user_id, name, phone, produit, prix, commentaire, "validé"])
+        except Exception as e:
+            logger.error(f"Error writing to CSV: {e}")
+            await update.message.reply_text("❗ Une erreur est survenue lors de l'enregistrement des données.")
+
+        keyboard = generate_menu_keyboard(lang)
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(choixbien_texts.get(lang, choixbien_texts["fr"]), reply_markup=reply_markup)
+        context.user_data["menu_biens_affiche"] = True
+        return
+
+    if context.user_data.get("at_description"):  # Si l'utilisateur est à l'étape de description
+        description_msg = description_texts.get(lang, description_texts["fr"])
+        keyboard = [
+            [InlineKeyboardButton(continue_texts[lang], callback_data="continue_after_description")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(description_msg, reply_markup=reply_markup)
+        return
+
+    if not text:  # Si le message est vide
+        await update.message.reply_text(mesagevide_texts.get(lang, mesagevide_texts["fr"]))
+        return
+
+    text_lower = text.lower()
+
+    try:
+        if text_lower in ["restart", "recommencer", "/start"]:  # Si l'utilisateur veut redémarrer
+            context.user_data.clear()
+            await send_message(update, context, reset_message)
+            await show_language_menu(update, context)
+            return
+
+        if "lang" not in context.user_data:  # Si la langue n'est pas définie
+            await send_message(update, context, "Veuillez d'abord sélectionner une langue.")
+            await show_language_menu(update, context)
+            context.user_data["menu_langue_affiche"] = True
+            return
+
+        if context.user_data.get("awaiting_price_proposal"):  # Si on attend une proposition de prix
+            try:
+                prix = float(text.replace(",", "."))
+            except ValueError:
+                await update.message.reply_text(montantvalid_texts.get(lang, montantvalid_texts["fr"]))
+                return
+            context.user_data["awaiting_price_proposal"] = False
+            context.user_data["proposed_price"] = prix
+            message = merci_prix_texts.get(lang, merci_prix_texts["fr"]).format(prix=prix)
+            await update.message.reply_text(message)
+            context.user_data["awaiting_comment"] = True
+            await update.message.reply_text(laisecom_texts.get(lang, laisecom_texts["fr"]))
+            return
+
+        if context.user_data.get("awaiting_comment"):  # Si on attend un commentaire
+            context.user_data["awaiting_comment"] = False
+            context.user_data["commentaire"] = text
+
+            user_id = update.effective_user.id
+            name = context.user_data.get("name", "")
+            phone = context.user_data.get("phone_number", "")
+            produit = context.user_data.get("produit_choisi", "")
+            prix = context.user_data.get("proposed_price", "")
+            date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            try:
+                with open("index.csv", mode="a", encoding="utf-8", newline="") as file:
+                    writer = csv.writer(file)
+                    writer.writerow([date, user_id, name, phone, produit, prix, text])
+            except Exception as e:
+                logger.error(f"Error writing to CSV: {e}")
+                await update.message.reply_text("❗ Une erreur est survenue lors de l'enregistrement des données.")
+
+            await update.message.reply_text(mercicom_texts.get(lang, mercicom_texts["fr"]))
+
+            keyboard = generate_menu_keyboard(lang)
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(choixbien_texts.get(lang, choixbien_texts["fr"]), reply_markup=reply_markup)
+            context.user_data["menu_biens_affiche"] = True
+            return
+
+        if context.user_data.get("awaiting_phone_number"):  # Si on attend un numéro de téléphone
+            raw_phone = text.strip()
+
+            try:
+                phone_obj = phonenumbers.parse(raw_phone, "MA")
+
+                if not phonenumbers.is_valid_number(phone_obj):  # Vérifie si le numéro est valide
+                    await update.message.reply_text(numvalid_texts.get(lang, numvalid_texts["fr"]))
+                    return
+
+                phone_formatted = phonenumbers.format_number(phone_obj, phonenumbers.PhoneNumberFormat.E164)
+                country_code = phonenumbers.region_code_for_number(phone_obj)
+                country_name = get_country_name(country_code)
+                flag_emoji = get_flag_emoji(country_code)
+
+                context.user_data["phone_number"] = phone_formatted
+                context.user_data["country_code"] = country_code
+                context.user_data["country_name"] = country_name
+                context.user_data["awaiting_phone_number"] = False
+
+                await update.message.reply_text(
+                    f"{mercitel_texts.get(lang, mercitel_texts['fr'])}\n📍 {paydet_texts.get(lang, paydet_texts['fr'])} : {flag_emoji} {country_name}"
+                )
+
+                keyboard = generate_menu_keyboard(lang)
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(choixbien_texts.get(lang, choixbien_texts["fr"]), reply_markup=reply_markup)
+                context.user_data["menu_biens_affiche"] = True
+                return
+
+            except NumberParseException:
+                await update.message.reply_text(numvalid_texts.get(lang, numvalid_texts["fr"]))
+                return
+
+        if context.user_data.get("menu_biens_affiche", False):  # Si le menu des biens est affiché
+            await update.message.reply_text(choixbiens_texts.get(lang, choixbiens_texts["fr"]))
+            keyboard = generate_menu_keyboard(lang)
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(choixbien_texts.get(lang, choixbien_texts["fr"]), reply_markup=reply_markup)
+            return
+
+        if text_lower in ["retour", "back"]:  # Si l'utilisateur veut revenir en arrière
+            if context.user_data.get("awaiting_comment"):
+                context.user_data["awaiting_comment"] = False
+                context.user_data["awaiting_price_proposal"] = True
+                await update.message.reply_text("↩️ Retour à la proposition de prix. Entrez un montant en DH.")
+                return
+            elif context.user_data.get("awaiting_phone_number"):
+                context.user_data["awaiting_phone_number"] = False
+                await update.message.reply_text("↩️ Retour à la saisie du nom. Veuillez entrer votre nom.")
+                return
+
+        context.user_data["name"] = text  # Enregistre le nom de l'utilisateur
+        await update.message.reply_text(f"{thank_you_texts.get(lang, thank_you_texts['fr'])} {text} !")
+        await update.message.reply_text(entrnumtel_texts.get(lang, entrnumtel_texts["fr"]))
+        context.user_data["awaiting_phone_number"] = True
+
+    except Exception as e:
+        logger.error(f"Error in handle_text_messages: {e}")
+        await update.message.reply_text(error_messages.get(lang, error_messages["fr"]))
+
+# ✅ 07. Récupère le nom complet d'un pays à partir de son code ISO alpha-2 (ex : "FR" → "France")
+def get_country_name(iso_code):
+    """Récupère le nom complet d'un pays à partir de son code ISO."""
+    try:
+        country = pycountry.countries.get(alpha_2=iso_code)
+        return country.name if country else iso_code
+    except:
+        return iso_code
+
+# ✅ 08. Génère l'emoji du drapeau à partir du code de pays (ex : "FR" → 🇫🇷)
+def get_flag_emoji(country_code):
+    """Génère l'emoji du drapeau à partir du code de pays."""
+    try:
+        return ''.join(chr(0x1F1E6 + ord(c.upper()) - ord('A')) for c in country_code)
+    except:
+        return ''
+
+# ✅ 09. Handler de repli pour les messages non pris en charge
+async def fallback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour les messages non pris en charge."""
+    lang = context.user_data.get("lang", "fr")
+    message = pascompris_texts.get(lang, pascompris_texts["fr"])
+    try:
+        if update.message:  # Si c'est un message
+            await update.message.reply_text(message)
+        elif update.callback_query:  # Si c'est une requête de callback
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(message)
+    except Exception as e:
+        logger.error(f"Error in fallback_handler: {e}")
+
+# ✅ 10. Handler de sélection de produit
+async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour gérer la sélection de produit."""
+    query = update.callback_query
+    await query.answer()
+    product = query.data
+    context.user_data["produit_choisi"] = product
+    lang = context.user_data.get("lang", "fr")
+
+    choix_text = choixdproduit_text.get(lang, choixdproduit_text["fr"])
+    product_label = produits_text.get(product, {}).get(lang, product)
+    details = property_details.get(product, {})
+
+    title = details.get("📝 title", {}).get(lang, "N/A")
+    description = details.get("🗒️ description", {}).get(lang, "N/A")
+    address = details.get("🏠 address", {}).get(lang, "N/A")
+    surface = details.get("📏 surface", {}).get(lang, "N/A")
+    location = details.get("📍 Géolocalisation", {}).get(lang, "N/A")
+    photo_link = details.get("📸 Photo_link", {}).get(lang, "N/A")
+    video_link = details.get("🎥 video_link", {}).get(lang, "N/A")
+    price = details.get("💰 price", {}).get(lang, "N/A")
+
+    message = (
+        f"{choix_text} {product_label}.\n\n"
+        f"{property_fields.get('📝 title', {}).get(lang, 'N/A')}: {title}\n"
+        f"{property_fields.get('🗒️ description', {}).get(lang, 'N/A')}: {description}\n"
+        f"{property_fields.get('🏠 address', {}).get(lang, 'N/A')}: {address}\n"
+        f"{property_fields.get('📏 surface', {}).get(lang, 'N/A')}: {surface}\n"
+        f"{property_fields.get('📍 Géolocalisation', {}).get(lang, 'N/A')}: {location}\n"
+        f"{property_fields.get('💰 price', {}).get(lang, 'N/A')}: {price}\n"
+        f"{property_fields.get('📸 Photo_link', {}).get(lang, 'N/A')}: {photo_link}\n"
+        f"{property_fields.get('🎥 video_link', {}).get(lang, 'N/A')}: {video_link}"
+    )
+
+    try:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        await query.edit_message_text(message)
+    except Exception as e:
+        logger.error(f"Error sending product details: {e}")
+
+    # Création du clavier pour les actions sur le produit
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"✅ {Popospri_texts.get(lang, Popospri_texts['fr'])} {monnaie_texts.get(lang, monnaie_texts['fr'])}", callback_data="propose_price")],
+        [InlineKeyboardButton("✅ Valider", callback_data="validate_price")],
+        [InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
+    ])
+
+    try:
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error setting reply markup after product selection: {e}")
+
+# ✅ 11. Handler pour afficher la liste des produits
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour afficher le menu avec la liste des produits."""
+    lang = context.user_data.get("lang", "fr")
+    message = choixbien_texts.get(lang, choixbien_texts["fr"])  # Message d'introduction
+    keyboard = generate_menu_keyboard(lang)  # Génère le clavier des produits
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        if update.message:  # Si c'est un message
+            await update.message.reply_text(message, reply_markup=reply_markup)
+        elif update.callback_query:  # Si c'est une requête de callback
+            await update.callback_query.edit_message_text(message, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error in menu handler: {e}")
+
+# ✅ 12. Handler pour revenir au menu
+async def handle_return_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour gérer le retour au menu principal."""
+    logger.info("Bouton 'Revenir Au Menu' cliqué")
+    query = update.callback_query
+    try:
+        if query:  # Si une requête de callback est présente
+            await query.answer()
+    except BadRequest as e:
+        logger.warning(f"Erreur dans query.answer() : {e}")
+
+    await menu(update, context)  # Affiche le menu principal
+
+# ✅ 13. Handler pour ajouter un commentaire
+async def handle_add_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler pour gérer l'ajout d'un commentaire par l'utilisateur."""
+    # Logique pour ajouter un commentaire
+    pass  # Remplacez ceci par la logique appropriée
+
+# Fonction principale pour démarrer le bot
+if __name__ == "__main__":
+    initialize_bot_identity(BOT_TOKEN)  # Initialise l'identité du bot
+    # Ajoutez ici le code pour démarrer le bot, par exemple en utilisant Updater ou Application de python-telegram-bot
+
+        
