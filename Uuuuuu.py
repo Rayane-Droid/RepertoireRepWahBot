@@ -423,7 +423,8 @@ async def handle_product_selection(update: Update, context: ContextTypes.DEFAULT
     reply_markup = InlineKeyboardMarkup([
         #
         [InlineKeyboardButton(f"✅ {Popospri_texts.get(lang, Popospri_texts['fr'])} {monnaie_texts.get(lang, monnaie_texts['fr'])}", callback_data="propose_price")],
-        [InlineKeyboardButton("✅ Valider", callback_data="validate_price")],  # Nouveau bouton "Valider"
+        [InlineKeyboardButton(f"✅ {valider_texts.get(lang, valider_texts['fr'])} 
+        #[InlineKeyboardButton("✅ Valider", callback_data="validate_price")],  # Nouveau bouton "Valider"
         [InlineKeyboardButton(revmenbien_texts.get(lang, revmenbien_texts["fr"]), callback_data="menu")]
     ])
 
