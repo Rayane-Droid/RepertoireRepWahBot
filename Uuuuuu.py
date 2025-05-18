@@ -2,22 +2,22 @@
 
 # ----------------- Importations des bibliothèques -----------------
 #import asyncio
+import os
 import csv
 import logging
 import pycountry
 import phonenumbers
 from phonenumbers import NumberParseException
 from datetime import datetime
+from dotenv import load_dotenv
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.constants import ChatAction
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.error import BadRequest
 
-import os
-from dotenv import load_dotenv
-
 from keep_alive import keep_alive, app
+
 from Dictionnaire1 import languages,
 welcome_texts, who_are_you_texts,
 thank_you_texts, choixdproduit_text,
@@ -33,11 +33,14 @@ propositionvalid_texts
 #,choixlangr_texts, choixproduit_text,
 commentaires_texts
 
-
 from Dictionnaire2 import continue_texts, privacy_texts, commandeincon_texts #, erreurenrdone_texts, ressayer_texts
+
 from Dictionnaire3 import description_texts
+
 from produits import property_fields, property_details, produits_text
+
 from fonctionne import generate_menu_keyboard
+
 from messages import confirmation_messages, error_messages, reset_message, mesagevide_texts
 #, thank_you_messages, phone_number_prompt
 
